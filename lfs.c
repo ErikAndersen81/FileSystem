@@ -10,6 +10,8 @@
 static FILE *DISK;
 static table_idx TABLE[BLOCKS];
 
+int lfs_truncate(const char* path, off_t size);
+
 static struct fuse_operations lfs_oper = {
   .getattr = lfs_getattr,
   .readdir = lfs_readdir,
@@ -17,7 +19,7 @@ static struct fuse_operations lfs_oper = {
   .mkdir = lfs_mkdir,
   .unlink = lfs_unlink,
   .rmdir = lfs_rmdir,
-  .truncate = NULL,
+  .truncate = lfs_truncate,
   .open	= lfs_open,
   .read	= lfs_read,
   .release = NULL,
@@ -25,10 +27,9 @@ static struct fuse_operations lfs_oper = {
   .rename = NULL,
   .utime = NULL,
   .create = lfs_create
-};
+};  
 
 int lfs_getattr( const char *path, struct stat *stbuf ) {
-  printf("getattr: %s\n", path);
   int ret = 0;
   Inode ffile;
   memset(stbuf, 0, sizeof(struct stat));
@@ -46,7 +47,6 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
 }
 
 int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi ) {
-  printf("readdir: %s\n", path);
   int ret = 0;
   table_idx dir_idx;
   Inode dir, entry;
@@ -61,6 +61,7 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
     for (int i = 0; i < dir.size/sizeof(table_idx); i++) {
         load_inode(content[i], &entry);
 	char name[MAX_PATH_LENGTH];
+	truncate_filename(entry.name, name);
 	filler(buf, name, NULL, 0);
       }
   }
@@ -77,7 +78,7 @@ int lfs_mkdir(const char* path, mode_t mode) {
   dir.acc_time = time(NULL);
   dir.mod_time = time(NULL);
   dir.mode = 0755 | S_IFDIR;
-  DISK=fopen(DISK_LOCATION, "r+");
+  DISK=fopen(DISK_LOCATION, "r+b");
   fseek(DISK, BLOCK_OFFSET(dir_idx), SEEK_SET);
   fwrite(&dir, sizeof(Inode), 1, DISK);
   fclose(DISK);
@@ -113,6 +114,19 @@ int lfs_rmdir(const char *path) {
   if (dir.size != 0) return -ENOTEMPTY;
   remove_dir_entry(dir_idx, parent_idx);
   update_table(dir_idx, FREE_BLOCK);
+  return 0;
+}
+
+int lfs_truncate(const char* path, off_t size) {
+  Inode ffile;
+  table_idx file_idx = get_index(path);
+  if (file_idx == END_BLOCK) return -ENOENT;
+  else {
+    load_inode(file_idx, &ffile);
+    ffile.size = size;
+    ffile.mod_time = time(NULL);
+    save_inode(file_idx, &ffile);
+  }
   return 0;
 }
 
@@ -236,7 +250,7 @@ void remove_dir_entry(table_idx entry_idx, table_idx dir_idx) {
 }
 
 void load_inode(table_idx i, Inode *ffile) {
-  DISK = fopen(DISK_LOCATION, "r");
+  DISK = fopen(DISK_LOCATION, "rb");
   fseek(DISK, BLOCK_OFFSET(i), SEEK_SET);
   fread(ffile, sizeof(Inode), 1, DISK);
   fclose(DISK);
@@ -244,7 +258,7 @@ void load_inode(table_idx i, Inode *ffile) {
 }
 
 void save_inode(table_idx i, Inode *ffile) {
-  DISK = fopen(DISK_LOCATION, "r+");
+  DISK = fopen(DISK_LOCATION, "r+b");
   fseek(DISK, BLOCK_OFFSET(i), SEEK_SET);
   fwrite(ffile, sizeof(Inode), 1, DISK);
   fclose(DISK);
@@ -289,14 +303,14 @@ int read_dir_content(table_idx idx, void* buf) {
 }
 
 void read_block(table_idx block_idx, void *content, size_t size, off_t offset) {
-  DISK = fopen(DISK_LOCATION, "r");
+  DISK = fopen(DISK_LOCATION, "rb");
   fseek(DISK, BLOCK_OFFSET(block_idx) + offset, SEEK_SET);
   fread(content, size, 1, DISK);
   fclose(DISK);
 }
 
 void write_block(table_idx block_idx, void *content, size_t size, off_t offset) {
-  DISK = fopen(DISK_LOCATION, "r+");
+  DISK = fopen(DISK_LOCATION, "r+b");
   fseek(DISK, BLOCK_OFFSET(block_idx) + offset, SEEK_SET);
   fwrite(content, size, 1, DISK);
   fclose(DISK);
@@ -304,7 +318,7 @@ void write_block(table_idx block_idx, void *content, size_t size, off_t offset) 
 
 void update_table(table_idx index, table_idx ptr) {
   TABLE[index]=ptr;
-  DISK = fopen(DISK_LOCATION, "r+");
+  DISK = fopen(DISK_LOCATION, "r+b");
   fseek(DISK, index*sizeof(table_idx), SEEK_SET);
   fwrite(&ptr, sizeof(table_idx), 1, DISK);
   fclose(DISK);
@@ -353,7 +367,7 @@ table_idx get_free_block() {
 }
 
 void load_table() {
-  DISK = fopen(DISK_LOCATION, "r");
+  DISK = fopen(DISK_LOCATION, "rb");
   fread(TABLE, sizeof(table_idx), 40640, DISK);
   fclose(DISK);
   return;
