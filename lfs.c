@@ -10,8 +10,6 @@
 static FILE *DISK;
 static table_idx TABLE[BLOCKS];
 
-int lfs_truncate(const char* path, off_t size);
-
 static struct fuse_operations lfs_oper = {
   .getattr = lfs_getattr,
   .readdir = lfs_readdir,

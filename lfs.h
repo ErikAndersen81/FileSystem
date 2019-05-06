@@ -2,7 +2,7 @@
 #define BLOCKS 40640
 #define DISK_START_BYTE 81920
 #define DISK_SIZE DISK_START_BYTE + BLOCKS * BLOCK_SIZE
-#define DISK_LOCATION "/mnt/home/erik/Documents/DM510OperatingSystems/assignment4/source/lfs-disk"
+#define DISK_LOCATION "./lfs-disk"
 #define MAX_PATH_LENGTH 32
 
 #define BLOCK_OFFSET(i) (DISK_START_BYTE + (i)*BLOCK_SIZE) 
@@ -31,6 +31,7 @@ int lfs_write( const char *, const char *, size_t, off_t, struct fuse_file_info 
 int lfs_create(const char *, mode_t, struct fuse_file_info *);
 int lfs_unlink(const char *);
 int lfs_mkdir(const char *, mode_t);
+int lfs_truncate(const char*, off_t);
 int lfs_rmdir(const char *);
 
 // Internal functions
